@@ -3,171 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXCORE - Pi Network App</title>
-    
-    <!-- ربط مكتبة Pi Network الرسمية -->
+    <title>NEXCORE App</title>
+    <!-- تضمين مكتبة Pi SDK الرسمية -->
     <script src="https://sdk.minepi.com/pi-sdk.js"></script>
-    <script>
-        // تهيئة الـ SDK مع تفعيل بيئة الفحص التجريبية (Sandbox)
-        Pi.init({ version: "2.0", sandbox: true });
-    </script>
-
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #0d1117;
-            color: #c9d1d9;
-            margin: 0;
-            padding: 20px;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            min-height: 100vh;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
         }
         .container {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 12px;
-            padding: 30px;
             text-align: center;
-            max-width: 450px;
+            padding: 20px;
+            max-width: 400px;
             width: 100%;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         h1 {
             color: #58a6ff;
-            margin-bottom: 10px;
-            font-size: 24px;
+            font-size: 28px;
+            margin-bottom: 20px;
         }
         p {
             color: #8b949e;
-            font-size: 14px;
+            font-size: 16px;
             line-height: 1.6;
-            margin-bottom: 25px;
         }
-        .btn-pay {
-            background-color: #e3a300;
+        .btn {
+            background-color: #ffc107;
             color: #000000;
             border: none;
-            border-radius: 8px;
-            padding: 14px 28px;
-            font-size: 16px;
+            padding: 15px 30px;
+            font-size: 18px;
             font-weight: bold;
+            border-radius: 8px;
             cursor: pointer;
             width: 100%;
-            transition: background-color 0.2s ease;
+            margin-top: 20px;
         }
-        .btn-pay:hover {
-            background-color: #f0b400;
+        .btn:hover {
+            background-color: #e0a800;
         }
         .status-box {
-            margin-top: 20px;
-            padding: 12px;
-            border-radius: 6px;
-            font-size: 13px;
-            background-color: #21262d;
+            background-color: #161b22;
             border: 1px solid #30363d;
-            text-align: right;
-            direction: ltr;
-            max-height: 120px;
-            overflow-y: auto;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 25px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 14px;
         }
-        .log-entry {
-            margin: 4px 0;
-            color: #8b949e;
-        }
-        .log-success {
-            color: #3fb950;
-        }
-        .log-error {
+        .error {
             color: #f85149;
+            margin-top: 10px;
+        }
+        .success {
+            color: #3fb950;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>NEXCORE App</h1>
-        <p>مرحباً بك في تطبيق NEXCORE. يرجى الضغط على الزر أدناه لتنفيذ عملية الدفع التجريبية واجتياز الخطوة العاشرة في حساب المطورين.</p>
-        
-        <!-- زر الدفع التجريبي -->
-        <button class="btn-pay" onclick="startTestPayment()">
-            تجربة دفع 1 Pi 
-        </button>
+<div class="container">
+    <h1>NEXCORE App</h1>
+    <p>مرحباً بك في تطبيق NEXCORE. يرجى الضغط على الزر أدناه لتنفيذ عملية الدفع التجريبية واجتياز الخطوة العاشرة في حساب المطورين.</p>
+    
+    <button class="btn" onclick="startPayment()">تجربة دفع 1 Pi</button>
 
-        <div class="status-box" id="statusBox">
-            <div class="log-entry">Status: System Ready...</div>
-        </div>
+    <div class="status-box">
+        <div>Status: <span id="status">System Ready...</span></div>
+        <div id="log"></div>
     </div>
+</div>
 
-    <script>
-        // دالة لعرض التحديثات على الشاشة أثناء المعاملة
-        function logStatus(message, type = 'normal') {
-            const statusBox = document.getElementById('statusBox');
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            if (type === 'success') entry.classList.add('log-success');
-            if (type === 'error') entry.classList.add('log-error');
-            entry.innerText = `> ${message}`;
-            statusBox.appendChild(entry);
-            statusBox.scrollTop = statusBox.scrollHeight;
+<script>
+    // 1. تهيئة الـ SDK الخاص بـ Pi Network
+    Pi.init({ version: "2.0", sandbox: true }); // اجعل sandbox: false عند الانتقال للشبكة الحقيقية
+
+    // 2. دالة المصادقة مع طلب صلاحية الـ payments بشكل صريح
+    async function authUser() {
+        try {
+            updateLog("جاري تسجيل الدخول والمصادقة...");
+            // هنا يكمن التعديل الأساسي بإضافة 'payments' للمصفوفة
+            const scopes = ['username', 'payments']; 
+            
+            const auth = await Pi.authenticate(scopes, onIncompletePaymentFound);
+            updateLog("تم تسجيل الدخول بنجاح للمستخدم: " + auth.user.username, "success");
+            return auth;
+        } catch (error) {
+            updateLog("فشل المصادقة: " + error.message, "error");
+            throw error;
         }
+    }
 
-        // دالة بدء عملية الدفع التجريبية
-        function startTestPayment() {
-            logStatus("جاري تحضير عملية الدفع...");
+    // 3. دالة بدء عملية الدفع
+    async function startPayment() {
+        try {
+            // المصادقة أولاً بالصلاحيات الصحيحة
+            await authUser();
 
-            const paymentData = {
-                amount: 1.0, // قيمة الدفع التجريبية
-                memo: "NEXCORE Test Payment", // وصف المعاملة
-                metadata: { orderId: "nexcore-test-101" } // معرف فرعي للمعاملة
-            };
+            updateLog("جاري تحضير عملية الدفع...");
 
-            const callbacks = {
-                // الخطوة 1: عند موافقة سيرفر Pi على بدء العملية
+            // إنشاء طلب الدفع
+            const payment = await Pi.createPayment({
+                amount: 1.0,
+                memo: "تجربة دفع 1 Pi لتطبيق NEXCORE",
+                metadata: { orderId: "test-order-123" }
+            }, {
                 onReadyForServerApproval: function(paymentId) {
-                    logStatus(`تم التجهيز. معرف الدفع: ${paymentId}`);
-                    logStatus("جاري إرسال التأكيد للسيرفر...");
-                    
-                    fetch(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {
-                        method: 'POST'
-                    }).then(() => {
-                        logStatus("تمت الموافقة الافتراضية بنجاح.", "success");
-                    }).catch(err => {
-                        logStatus("تم إرسال إشعار الموافقة.", "success");
-                    });
+                    updateLog("تم تجهيز الدفع. بانتظار موافقة السيرفر المطور ID: " + paymentId);
+                    // هنا ترسل الـ paymentId إلى السيرفر الخاص بك لاعتماده
                 },
-                
-                // الخطوة 2: عند اكتمال المعاملة على البلوكشين بنجاح
                 onReadyForServerCompletion: function(paymentId, txid) {
-                    logStatus(`اكتملت بنجاح على البلوكشين!`, "success");
-                    logStatus(`TXID: ${txid.substring(0, 15)}...`, "success");
-                    
-                    fetch(`https://api.minepi.com/v2/payments/${paymentId}/complete`, {
-                        method: 'POST'
-                    });
+                    updateLog("تمت الموافقة. جاري إكمال الدفع على الشبكة TxID: " + txid);
+                    // هنا ترسل الـ txid للسيرفر الخاص بك لإغلاق العملية
                 },
-                
-                // في حال إلغاء الدفع من قبل المستخدم
                 onCancel: function(paymentId) {
-                    logStatus(`تم إلغاء عملية الدفع من المستخدم. ID: ${paymentId}`, "error");
+                    updateLog("تم إلغاء عملية الدفع من قبل المستخدم.", "error");
                 },
-                
-                // في حال حدوث أي خطأ
                 onError: function(error, payment) {
-                    logStatus(`خطأ: ${error.message || error}`, "error");
-                    console.error("Payment Error:", error);
+                    updateLog("حدث خطأ أثناء الدفع: " + error.message, "error");
                 }
-            };
+            });
 
-            // استدعاء نافذة الدفع وتمرير البيانات
-            try {
-                Pi.createPayment(paymentData, callbacks);
-            } catch (err) {
-                logStatus(`فشل استدعاء نافذة الدفع: ${err.message}`, "error");
-            }
+        } catch (error) {
+            updateLog("فشل استدعاء نافذة الدفع: " + error.message, "error");
         }
-    </script>
+    }
+
+    // دالة للتعامل مع المدفوعات المعلقة (Incomplete Payments)
+    function onIncompletePaymentFound(payment) {
+        updateLog("تم العثور على عملية دفع معلقة وغير مكتملة ID: " + payment.identifier);
+        // أرسل الـ payment.identifier إلى السيرفر لإكمالها أو إلغائها
+    }
+
+    // دالة مساعدة لتحديث سجل الحالة على الشاشة
+    function updateLog(message, type = "") {
+        const logDiv = document.getElementById("log");
+        let colorClass = "";
+        if (type === "error") colorClass = 'class="error"';
+        if (type === "success") colorClass = 'class="success"';
+        
+        logDiv.innerHTML = `<span ${colorClass}>> ${message}</span>`;
+        document.getElementById("status").innerText = "Active";
+    }
+</script>
+
 </body>
 </html>
