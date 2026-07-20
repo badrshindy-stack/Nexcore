@@ -95,3 +95,191 @@
             logEl.innerText = msg;
             logEl.className = 'log ' + type;
         }
+// ========== التحقق من Pi SDK مع مهلة زمنية ==========
+        let sdkTimeout = setTimeout(() => {
+            if (!window.Pi) {
+                setLog("⚠️ لم يتم تحميل Pi SDK. تأكد من فتح الصفحة في تطبيق Pi Browser", "error");
+                loginBtn.disabled = true;
+                statusText.innerText = "خطأ في التحميل";
+            }
+        }, 8000);
+
+        const wait = setInterval(() => {
+            if (window.Pi) {
+                Pi.init({ version: "2.0", sandbox: true });
+                piReady = true;
+                clearInterval(wait);
+                clearTimeout(sdkTimeout);
+                loginBtn.disabled = false;
+                statusText.innerText = "✅ جاهز — اضغط تسجيل الدخول";
+                setLog("✅ جاهز للربط — اضغط الزر أدناه");
+            }
+        }, 200);
+
+        // ========== تسجيل الدخول مع تخزين آمن ==========
+        async function login() {
+            if (!piReady) return setLog("افتح التطبيق داخل Pi Browser", "error");
+
+            loginBtn.disabled = true;
+            loginSpinner.style.display = "block";
+            loginBtnText.innerText = "جاري الاتصال...";
+
+            try {
+                const auth = await Pi.authenticate(
+                    ["username", "payments"],
+                    (p) => console.log("incomplete payment", p)
+                );
+
+                currentUser = auth.user;
+                
+                // تخزين الجلسة بشكل آمن
+                sessionStorage.setItem('pi_session', JSON.stringify({
+                    username: auth.user.username,
+                    uid: auth.user.uid,
+                    timestamp: Date.now()
+                }));
+
+                document.getElementById('username').innerText = "@" + auth.user.username;
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('paySection').classList.remove('hidden');
+                document.getElementById('statusBox').classList.add('connected');
+                setLog("✅ تم تسجيل الدخول بنجاح", "success");
+
+                // تسجيل الدخول في الخادم
+                try {
+                    await fetch(setLog("⏳ جاري موافقة الخادم...");
+                        try {
+                            const response = await fetch(${API_BASE_URL}/payments/approve, {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': Bearer ${currentUser?.uid} // أمان
+                                },
+                                body: JSON.stringify({ 
+                                    paymentId, 
+                                    amount,
+                                    userId: currentUser?.uid 
+                                })
+                            });
+
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error || 'فشلت موافقة الخادم');
+                            }
+
+                            setLog("✅ تمت موافقة الخادم", "success");
+                        } catch (err) {
+                            setLog("❌ فشل الموافقة: " + err.message, "error");
+                        }
+                    },
+                    onReadyForServerCompletion: async (paymentId, txid) => {
+                        setLog("⏳ جاري توثيق الدفعة وتحديث المخزون...");
+                        try {
+                            const response = await fetch(${API_BASE_URL}/payments/complete, {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': Bearer ${currentUser?.uid}
+                                },
+                                body: JSON.stringify({ 
+                                    paymentId, 
+                                    txid,
+                                    userId: currentUser?.uid,
+                                    amount // تسجيل المبلغ للتدقيق
+                                })
+                            });
+
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error || 'فشل التوثيق');
+                            }
+
+                            // تحديث واجهة المستخدم بعد الدفع الناجح
+                            const data = await response.json();
+                            setLog(✅ تمت الدفعة بنجاح! المبلغ: ${amount} π, "success");
+                            
+                            // يمكن إضافة تأثير احتفالي
+                            showSuccessAnimation();
+
+                        } catch (err) {
+                            setLog("❌ فشل الإكمال: " + err.message, "error");
+                        }
+                    },
+                    onCancel: () => setLog("تم إلغاء الدفعة من قبل المستخدم"),
+                    onError: (err) => setLog("❌ خطأ في المعاملة: " + err.message, "error")
+                }
+            );
+        }
+
+        // ========== تأثير النجاح ==========
+        function showSuccessAnimation() {
+            const logBox = document.getElementById('log');
+            logBox.innerHTML = '✅✅✅ تمت الدفعة بنجاح ✅✅✅';
+            logBox.style.background = 'rgba(0,184,148,0.2)';
+            logBox.style.border = '2px solid var(--success)';
+            logBox.style.fontSize = '18px';
+            logBox.style.padding = '20px';
+            
+            setTimeout(() => {
+                logBox.style.background = '';
+                logBox.style.border = '';
+                logBox.style.fontSize = '';
+                logBox.style.padding = '';
+            }, 5000);
+        }
+
+        // ========== تسجيل الخروج ==========function logout() {
+            currentUser = null;
+            sessionStorage.removeItem('pi_session');
+            
+            document.getElementById('paySection').classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('statusBox').classList.remove('connected');
+            loginBtn.disabled = false;
+            setLog("✅ تم تسجيل الخروج — اضغط للدخول مرة أخرى");
+        }
+
+        // ========== التحقق من الجلسة عند التحميل ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedSession = sessionStorage.getItem('pi_session');
+            if (savedSession) {
+                try {
+                    const session = JSON.parse(savedSession);
+                    // التحقق من صلاحية الجلسة (أقل من ساعة)
+                    if (Date.now()
+  - session.timestamp < 3600000) {
+                        console.log(} catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: '❌ خطأ في تسجيل الدخول' });
+    }
+});
+
+// موافقة الخادم على الدفع
+app.post('/api/payments/approve', authenticateToken, async (req, res) => {
+    try {
+        const { paymentId, amount, userId } = req.body;
+        
+        // التحقق من صحة البيانات
+        if (!paymentId || !amount) {
+            return res.status(400).json({ error: '❌ بيانات غير مكتملة' });
+        }
+
+        // التحقق من المبلغ (أمان)
+        if (amount > 1000) {
+            return res.status(400).json({ error: '❌ المبلغ كبير جداً' });
+        }
+
+        // تسجيل الدفع في قاعدة البيانات
+        await pool.query(
+            } catch (error) {
+        if (error.code === '23505') {
+            return res.status(400).json({ error: '❌ هذا الكود موجود مسبقاً' });
+        }
+        console.error('Add item error:', error);
+        res.status(500).json({ error: '❌ فشل إضافة الصنف' });
+    }
+});
+
+// بدء الخادم
+app.listen(port, '0.0.0.0', () => {
+    console.log(
