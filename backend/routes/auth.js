@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
+const User = require('../models/User');
 
 const router = express.Router();
 
@@ -14,13 +14,12 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
         }
 
-        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        const user = await User.findOne({ username });
 
-        if (result.rows.length === 0) {
+        if (!user) {
             return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
         }
 
-        const user = result.rows[0];
         const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
         if (!passwordMatch) {
@@ -28,7 +27,7 @@ router.post('/login', async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
+            { id: user._id, username: user.username, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
@@ -36,7 +35,7 @@ router.post('/login', async (req, res) => {
         res.json({
             token,
             user: {
-                id: user.id,
+                id: user._id,
                 username: user.username,
                 role: user.role
             }
@@ -55,22 +54,23 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
         }
 
-        const userExists = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-        if (userExists.rows.length > 0) {
+        const userExists = await User.findOne({ username });
+        if (userExists) {
             return res.status(400).json({ error: 'اسم المستخدم موجود بالفعل' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const result = await pool.query(
-            'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role',
-            [username, hashedPassword, role || 'staff']
-        );
+        const user = new User({
+            username,
+            password_hash: hashedPassword,
+            role: role || 'staff'
+        });
 
-        const user = result.rows[0];
+        await user.save();
 
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
+            { id: user._id, username: user.username, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
@@ -78,7 +78,7 @@ router.post('/register', async (req, res) => {
         res.status(201).json({
             token,
             user: {
-                id: user.id,
+                id: user._id,
                 username: user.username,
                 role: user.role
             }
