@@ -1,0 +1,540 @@
+name=public/index.html1 url=https://github.com/badrshindy-stack/Nexcore/blob/main/public/index.html
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Nexcore - نظام إدارة المستشفيات</title>
+  <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Tajawal', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #333;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .navbar {
+      background: rgba(255,255,255,0.95);
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    .navbar h1 { color: #667eea; font-size: 28px; }
+    .user-info { text-align: center; }
+    .user-info p { color: #666; font-size: 14px; }
+    .user-info b { color: #667eea; display: block; margin-top: 4px; }
+    .logout-btn {
+      background: #ff6b6b;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .logout-btn:hover { background: #ff5252; }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      transition: transform 0.3s;
+    }
+    .card:hover { transform: translateY(-5px); }
+    .card h2 { color: #667eea; margin-bottom: 16px; font-size: 20px; }
+    
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      border-color: #667eea;
+      outline: none;
+    }
+    
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+    .btn-primary { background: #667eea; color: white; }
+    .btn-primary:hover { background: #5568d3; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-secondary:hover { background: #e0e0e0; }
+    .btn-success { background: #51cf66; color: white; }
+    .btn-danger { background: #ff6b6b; color: white; }
+    
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+    .table th {
+      background: #f5f5f5;
+      padding: 12px;
+      text-align: right;
+      border-bottom: 2px solid #e0e0e0;
+      font-weight: bold;
+    }
+    .table td { padding: 12px; border-bottom: 1px solid #f0f0f0; }
+    .table tr:hover { background: #f9f9f9; }
+    
+    .alert {
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-weight: bold;
+    }
+    .alert-success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+    .alert-error { background: #f8d7da; color: #721c24; border-left: 4px solid #f5c6cb; }
+    .alert-info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+    
+    .login-page {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .login-card {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 400px;
+      text-align: center;
+    }
+    .login-card .logo {
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+    .login-card h1 { color: #667eea; margin-bottom: 8px; }
+    .login-card p { color: #999; margin-bottom: 30px; }
+    
+    .section { display: none; }
+    .section.active { display: block; }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .stat-box .number { font-size: 32px; font-weight: bold; }
+    .stat-box .label { font-size: 14px; opacity: 0.9; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <!-- صفحة تسجيل الدخول -->
+  <div id="loginPage" class="login-page section active">
+    <div class="login-card">
+      <div class="logo">🏥</div>
+      <h1>Nexcore</h1>
+      <p>نظام إدارة المستشفيات والمخزون</p>
+      <button class="btn btn-primary" onclick="login()" style="width: 100%;">تسجيل الدخول عبر Pi</button>
+      <div id="loginLog" class="alert alert-info" style="margin-top: 20px; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- الصفحة الرئيسية -->
+  <div id="dashboard" class="section">
+    <div class="navbar">
+      <h1>🏥 Nexcore</h1>
+      <div class="user-info">
+        <p>مرحباً بك</p>
+        <b id="displayUsername"></b>
+      </div>
+      <button class="logout-btn" onclick="logout()">تسجيل الخروج</button>
+    </div>
+
+    <div class="container">
+      <!-- الإحصائيات -->
+      <div class="stats">
+        <div class="stat-box">
+          <div class="number" id="inventoryCount">0</div>
+          <div class="label">أصناف المخزون</div>
+        </div>
+        <div class="stat-box">
+          <div class="number" id="patientsCount">0</div>
+          <div class="label">المرضى المسجلين</div>
+        </div>
+        <div class="stat-box">
+          <div class="number" id="lowStockCount">0</div>
+          <div class="label">أصناف منخفضة</div>
+        </div>
+      </div>
+
+      <!-- القوائم -->
+      <div style="margin-bottom: 20px;">
+        <button class="btn btn-primary" onclick="showSection('inventoryTab')">📦 المخزون</button>
+        <button class="btn btn-primary" onclick="showSection('patientsTab')">👥 المرضى</button>
+        <button class="btn btn-primary" onclick="showSection('paymentTab')">💰 الدفع عبر Pi</button>
+      </div>
+
+      <!-- تبويب المخزون -->
+      <div id="inventoryTab" class="section active">
+        <div class="card">
+          <h2>📦 إدارة المخزون</h2>
+          <div class="form-group">
+            <label>اسم الصنف</label>
+            <input type="text" id="itemName" placeholder="مثال: مصل">
+          </div>
+          <div class="form-group">
+            <label>الكود</label>
+            <input type="text" id="itemCode" placeholder="مثال: ITEM-001">
+          </div>
+          <div class="form-group">
+            <label>الكمية</label>
+            <input type="number" id="itemQty" value="0" min="0">
+          </div>
+          <div class="form-group">
+            <label>الحد الأدنى</label>
+            <input type="number" id="itemMin" value="10" min="0">
+          </div>
+          <button class="btn btn-success" onclick="addInventoryItem()" style="width: 100%;">➕ إضافة صنف</button>
+          <div id="inventoryMsg" class="alert" style="display: none; margin-top: 16px;"></div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>الكود</th>
+                <th>الكمية</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryList"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- تبويب المرضى -->
+      <div id="patientsTab" class="section">
+        <div class="card">
+          <h2>👥 إدارة المرضى</h2>
+          <div class="form-group">
+            <label>اسم المريض</label>
+            <input type="text" id="patientName" placeholder="أدخل الاسم">
+          </div>
+          <div class="form-group">
+            <label>رقم الهاتف</label>
+            <input type="tel" id="patientPhone" placeholder="مثال: 249123456789">
+          </div>
+          <div class="form-group">
+            <label>البريد الإلكتروني</label>
+            <input type="email" id="patientEmail" placeholder="patient@example.com">
+          </div>
+          <button class="btn btn-success" onclick="addPatient()" style="width: 100%;">➕ إضافة مريض</button>
+          <div id="patientMsg" class="alert" style="display: none; margin-top: 16px;"></div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>الهاتف</th>
+                <th>البريد</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="patientsList"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- تبويب الدفع -->
+      <div id="paymentTab" class="section">
+        <div class="card">
+          <h2>💰 الدفع عبر Pi Network</h2>
+          <div class="form-group">
+            <label>المبلغ (π)</label>
+            <input type="number" id="amount" value="1" min="0.01" max="1000" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>الوصف</label>
+            <input type="text" id="memo" placeholder="وصف الدفعة" maxlength="150">
+          </div>
+          <button class="btn btn-primary" id="payBtn" onclick="pay()" style="width: 100%;">إرسال الدفعة</button>
+          <div id="paymentMsg" class="alert" style="display: none; margin-top: 16px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let piReady = false;
+    let isProcessing = false;
+    let currentUser = null;
+
+    // انتظر تحميل Pi SDK
+    const wait = setInterval(() => {
+      if (window.Pi) {
+        Pi.init({ version: "2.0", sandbox: true });
+        piReady = true;
+        clearInterval(wait);
+      }
+    }, 200);
+
+    function showSection(sectionId) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+      if (sectionId === 'inventoryTab') loadInventory();
+      if (sectionId === 'patientsTab') loadPatients();
+    }
+
+    async function login() {
+      if (!piReady) {
+        showMessage('loginLog', '❌ افتح التطبيق داخل Pi Browser', 'error');
+        return;
+      }
+      try {
+        const auth = await Pi.authenticate(["username", "payments"], (p) => {});
+        currentUser = auth.user;
+        document.getElementById('displayUsername').innerText = "@" + auth.user.username;
+        document.getElementById('loginPage').classList.remove('active');
+        document.getElementById('dashboard').classList.add('active');
+        loadInventory();
+        loadPatients();
+      } catch (e) {
+        showMessage('loginLog', '❌ ' + e.message, 'error');
+      }
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById('dashboard').classList.remove('active');
+      document.getElementById('loginPage').classList.add('active');
+    }
+
+    async function addInventoryItem() {
+      const name = document.getElementById('itemName').value.trim();
+      const code = document.getElementById('itemCode').value.trim();
+      const qty = parseInt(document.getElementById('itemQty').value);
+      const min = parseInt(document.getElementById('itemMin').value);
+
+      if (!name || !code) {
+        showMessage('inventoryMsg', '❌ أدخل الاسم والكود', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, code, quantity: qty, min_threshold: min })
+        });
+
+        if (res.ok) {
+          showMessage('inventoryMsg', '✅ تم إضافة الصنف بنجاح', 'success');
+          document.getElementById('itemName').value = '';
+          document.getElementById('itemCode').value = '';
+          loadInventory();
+        } else {
+          showMessage('inventoryMsg', '❌ خطأ في الإضافة', 'error');
+        }
+      } catch (e) {
+        showMessage('inventoryMsg', '❌ ' + e.message, 'error');
+      }
+    }
+
+    async function addPatient() {
+      const name = document.getElementById('patientName').value.trim();
+      const phone = document.getElementById('patientPhone').value.trim();
+      const email = document.getElementById('patientEmail').value.trim();
+
+      if (!name) {
+        showMessage('patientMsg', '❌ أدخل اسم المريض', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/patients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone, email })
+        });
+
+        if (res.ok) {
+          showMessage('patientMsg', '✅ تم إضافة المريض بنجاح', 'success');
+          document.getElementById('patientName').value = '';
+          document.getElementById('patientPhone').value = '';
+          document.getElementById('patientEmail').value = '';
+          loadPatients();
+        } else {
+          showMessage('patientMsg', '❌ خطأ في الإضافة', 'error');
+        }
+      } catch (e) {
+        showMessage('patientMsg', '❌ ' + e.message, 'error');
+      }
+    }
+
+    async function loadInventory() {
+      try {
+        const res = await fetch('/api/inventory');
+        const items = await res.json();
+        const tbody = document.getElementById('inventoryList');
+        tbody.innerHTML = items.map(item => `
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.code}</td>
+            <td>${item.quantity}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="deleteInventory('${item._id}')">حذف</button></td>
+          </tr>
+        `).join('');
+        document.getElementById('inventoryCount').innerText = items.length;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function loadPatients() {
+      try {
+        const res = await fetch('/api/patients');
+        const patients = await res.json();
+        const tbody = document.getElementById('patientsList');
+        tbody.innerHTML = patients.map(p => `
+          <tr>
+            <td>${p.name}</td>
+            <td>${p.phone || '-'}</td>
+            <td>${p.email || '-'}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="deletePatient('${p._id}')">حذف</button></td>
+          </tr>
+        `).join('');
+        document.getElementById('patientsCount').innerText = patients.length;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function deleteInventory(id) {
+      if (!confirm('هل تأكد من الحذف؟')) return;
+      try {
+        await fetch(`/api/inventory/${id}`, { method: 'DELETE' });
+        loadInventory();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function deletePatient(id) {
+      if (!confirm('هل تأكد من الحذف؟')) return;
+      try {
+        await fetch(`/api/patients/${id}`, { method: 'DELETE' });
+        loadPatients();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function pay() {
+      if (isProcessing) return;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const memo = document.getElementById('memo').value.trim();
+
+      if (!amount || amount <= 0 || amount > 1000) {
+        showMessage('paymentMsg', '❌ أدخل مبلغ صحيح', 'error');
+        return;
+      }
+      if (!memo || memo.length < 3) {
+        showMessage('paymentMsg', '❌ أدخل وصفاً (3 أحرف على الأقل)', 'error');
+        return;
+      }
+
+      isProcessing = true;
+      document.getElementById('payBtn').disabled = true;
+
+      try {
+        showMessage('paymentMsg', '⏳ جاري إنشاء الدفعة...', 'info');
+        Pi.createPayment(
+          { amount, memo, metadata: { app: "nexcore" } },
+          {
+            onReadyForServerApproval: async (paymentId) => {
+              try {
+                const r = await fetch('/api/approve', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ paymentId })
+                });
+                if (!r.ok) throw new Error('فشل الموافقة');
+              } catch (e) {
+                showMessage('paymentMsg', '❌ ' + e.message, 'error');
+                isProcessing = false;
+                document.getElementById('payBtn').disabled = false;
+              }
+            },
+            onReadyForServerCompletion: async (paymentId, txid) => {
+              try {
+                const r = await fetch('/api/complete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ paymentId, txid })
+                });
+                if (r.ok) {
+                  showMessage('paymentMsg', '✅ تمت الدفعة بنجاح!', 'success');
+                  document.getElementById('amount').value = '1';
+                  document.getElementById('memo').value = '';
+                } else {
+                  throw new Error('فشل الإكمال');
+                }
+              } catch (e) {
+                showMessage('paymentMsg', '❌ ' + e.message, 'error');
+              } finally {
+                isProcessing = false;
+                document.getElementById('payBtn').disabled = false;
+              }
+            },
+            onCancel: () => {
+              showMessage('paymentMsg', '⚠️ تم إلغاء الدفعة', 'info');
+              isProcessing = false;
+              document.getElementById('payBtn').disabled = false;
+            },
+            onError: (err) => {
+              showMessage('paymentMsg', '❌ خطأ: ' + err.message, 'error');
+              isProcessing = false;
+              document.getElementById('payBtn').disabled = false;
+            }
+          }
+        );
+      } catch (e) {
+        showMessage('paymentMsg', '❌ ' + e.message, 'error');
+        isProcessing = false;
+        document.getElementById('payBtn').disabled = false;
+      }
+    }
+
+    function showMessage(elementId, msg, type) {
+      const el = document.getElementById(elementId);
+      el.innerText = msg;
+      el.className = `alert alert-${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'}`;
+      el.style.display = 'block';
+    }
+  </script>
+</body>
+  </html>
