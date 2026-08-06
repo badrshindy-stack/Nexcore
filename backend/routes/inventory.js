@@ -1,13 +1,13 @@
-const express = require('express');
-const pool = require('../config/db');
+   const express = require('express');
+const Inventory = require('../models/Inventory');
 
 const router = express.Router();
 
 // عرض كل المخزون
 router.get('/', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM inventory ORDER BY name');
-        res.json(result.rows);
+        const items = await Inventory.find().sort({ name: 1 });
+        res.json(items);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -17,13 +17,13 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await pool.query('SELECT * FROM inventory WHERE id = $1', [id]);
+        const item = await Inventory.findById(id);
         
-        if (result.rows.length === 0) {
+        if (!item) {
             return res.status(404).json({ error: 'الصنف غير موجود' });
         }
         
-        res.json(result.rows[0]);
+        res.json(item);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -38,16 +38,23 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'الاسم والكود مطلوبان' });
         }
 
-        const result = await pool.query(
-            'INSERT INTO inventory (name, code, quantity, min_threshold, category, expiry_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [name, code, quantity || 0, min_threshold || 10, category || 'عام', expiry_date || null]
-        );
-
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        if (error.code === '23505') {
+        const codeExists = await Inventory.findOne({ code });
+        if (codeExists) {
             return res.status(400).json({ error: 'الكود موجود بالفعل' });
         }
+
+        const item = new Inventory({
+            name,
+            code,
+            quantity: quantity || 0,
+            min_threshold: min_threshold || 10,
+            category: category || 'عام',
+            expiry_date: expiry_date || null
+        });
+
+        await item.save();
+        res.status(201).json(item);
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
@@ -58,16 +65,27 @@ router.put('/:id', async (req, res) => {
         const { id } = req.params;
         const { name, code, quantity, min_threshold, category, expiry_date } = req.body;
 
-        const result = await pool.query(
-            'UPDATE inventory SET name = COALESCE($1, name), code = COALESCE($2, code), quantity = COALESCE($3, quantity), min_threshold = COALESCE($4, min_threshold), category = COALESCE($5, category), expiry_date = COALESCE($6, expiry_date), updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-            [name, code, quantity, min_threshold, category, expiry_date, id]
+        const item = await Inventory.findByIdAndUpdate(
+            id,
+            {
+                $set: {
+                    name: name,
+                    code: code,
+                    quantity: quantity,
+                    min_threshold: min_threshold,
+                    category: category,
+                    expiry_date: expiry_date,
+                    updatedAt: new Date()
+                }
+            },
+            { new: true }
         );
 
-        if (result.rows.length === 0) {
+        if (!item) {
             return res.status(404).json({ error: 'الصنف غير موجود' });
         }
 
-        res.json(result.rows[0]);
+        res.json(item);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -78,13 +96,13 @@ router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         
-        const result = await pool.query('DELETE FROM inventory WHERE id = $1 RETURNING *', [id]);
+        const item = await Inventory.findByIdAndDelete(id);
 
-        if (result.rows.length === 0) {
+        if (!item) {
             return res.status(404).json({ error: 'الصنف غير موجود' });
         }
 
-        res.json({ message: 'تم حذف الصنف بنجاح', item: result.rows[0] });
+        res.json({ message: 'تم حذف الصنف بنجاح', item });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -93,11 +111,12 @@ router.delete('/:id', async (req, res) => {
 // البحث عن أصناف منخفضة الكمية
 router.get('/low-stock/all', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM inventory WHERE quantity < min_threshold ORDER BY quantity ASC');
-        res.json(result.rows);
+        const items = await Inventory.find({ $expr: { $lt: ['$quantity', '$min_threshold'] } }).sort({ quantity: 1 });
+        res.json(items);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
 module.exports = router;
+        
