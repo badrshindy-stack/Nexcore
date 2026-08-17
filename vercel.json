@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/server.js",
+      "src": "server.js",
       "use": "@vercel/node"
     },
     {
@@ -12,16 +12,18 @@
   ],
   "routes": [
     {
-      "src": "/validation-key.txt",
-      "dest": "/public/validation-key.txt"
-    },
-    {
       "src": "/api/(.*)",
-      "dest": "/backend/server.js"
+      "dest": "server.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/public/$1"
+      "dest": "public/index.html"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "MONGODB_URI": "@mongodb_uri",
+    "SESSION_SECRET": "@session_secret",
+    "PI_API_KEY": "@pi_api_key"
+  }
 }
