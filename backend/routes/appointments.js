@@ -131,4 +131,206 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // التحقق من عدم وجود تعارض في المواعيد
+    // التحقق من عدم وجود تعارض في المواعيد    const conflicting = await Appointment.findOne({
+      doctor: appointmentData.doctor,
+      date: appointmentData.date,
+      status: { $in: ['scheduled', 'confirmed', 'in_progress'] }
+    });
+
+    if (conflicting) {
+      return res.status(409).json({
+        success: false,
+        message: 'يوجد تعارض في المواعيد مع طبيب آخر'
+      });
+    }
+
+    // إنشاء رقم موعد فريد
+    const count = await Appointment.countDocuments();
+    appointmentData.appointmentId = `APP-${String(count + 1).padStart(6, '0')}`;
+
+    const appointment = new Appointment(appointmentData);
+    await appointment.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إنشاء الموعد بنجاح',
+      data: { appointment }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في إنشاء الموعد:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء إنشاء الموعد'
+    });
+  }
+});
+
+// =============================================
+// 4. تحديث موعد
+// =============================================
+router.put('/:id', async (req, res) => {
+  try {
+    const appointment = await Appointment.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'الموعد غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث الموعد بنجاح',
+      data: { appointment }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في تحديث الموعد:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الموعد'
+    });
+  }
+});
+
+// =============================================
+// 5. حذف موعد
+// =============================================
+router.delete('/:id', async (req, res) => {
+  try {
+    const appointment = await Appointment.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false, status: 'cancelled', updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'الموعد غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم حذف الموعد بنجاح'
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في حذف الموعد:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء حذف الموعد'
+    });
+  }
+});
+
+// =============================================
+// 6. تحديث حالة الموعد
+// =============================================
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { status, cancellationReason } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'الحالة مطلوبة'
+      });
+    }
+
+    const updateData = { 
+      status, 
+      updatedAt: new Date() 
+    };
+
+    if (status === 'cancelled' && cancellationReason) {
+      updateData.cancellationReason = cancellationReason;
+    }
+
+    if (status === 'completed') {
+      // إنشاء فاتورة عند إكمال الموعد
+      const appointment = await Appointment.findById(req.params.id);
+      if (appointment) {
+        const invoice = new Invoice({
+          invoiceNumber: `INV-${Date.now()}`,
+          patient: appointment.patient,
+          appointment: appointment._id,
+          doctor: appointment.doctor,
+          items: [{
+            description: `موعد ${appointment.type}`,
+            quantity: 1,
+            unitPrice: 50, // يمكن جلبها من الطبيب
+            total: 50,
+            type: 'consultation'
+          }],
+          createdBy: req.session.userId
+        });
+        await invoice.save();
+        updateData.invoice = invoice._id;
+      }
+    }
+
+    const appointment = await Appointment.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'الموعد غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث حالة الموعد بنجاح',
+      data: { appointment }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في تحديث حالة الموعد:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث حالة الموعد'
+    });
+  }
+});
+
+// =============================================
+// 7. المواعيد القادمة للمريض
+// =============================================
+router.get('/patient/:patientId/upcoming', async (req, res) => {
+  try {
+    const appointments = await Appointment.find({
+      patient: req.params.patientId,
+      date: { $gte: new Date() },
+      status: { $in: ['scheduled', 'confirmed'] },
+      isActive: true
+    })
+      .populate('doctor', 'fullName specialization')
+      .sort({ date: 1 });
+
+    res.json({
+      success: true,
+      data: { appointments }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في جلب المواعيد القادمة:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء جلب المواعيد القادمة'
+    });
+  }
+});
+
+module.exports = router;
