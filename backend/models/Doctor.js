@@ -1,156 +1,289 @@
-const mongoose = require('mongoose');
+const express = require('express');
+const router = express.Router();
+const Doctor = require('../models/Doctor');
+const User = require('../models/User');
+const Employee = require('../models/Employee');
+const Appointment = require('../models/Appointment');
 
-const DoctorSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  employee: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Employee'
-  },
-  employeeId: {
-    type: String,
-    required: true,
-    unique: true,
-    uppercase: true,
-    trim: true
-  },
-  fullName: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 100
-  },
-  specialization: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  subSpecializations: [{
-    type: String,
-    trim: true
-  }],
-  licenseNumber: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  licenseExpiry: {
-    type: Date
-  },
-  clinic: {
-    type: String,
-    trim: true
-  },
-  consultationFee: {
-    type: Number,
-    min: 0,
-    default: 0
-  },
-  availableDays: [{
-    type: String,
-    enum: ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']
-  }],
-  availableHours: {
-    start: {
-      type: String,
-      match: [/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, 'صيغة الوقت غير صحيحة']
-    },
-    end: {
-      type: String,
-      match: [/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, 'صيغة الوقت غير صحيحة']
-    },
-    breakStart: String,
-    breakEnd: String,
-    slotDuration: {
-      type: Number,
-      default: 30 // بالدقائق
+// =============================================
+// 1. الحصول على جميع الأطباء
+// =============================================
+router.get('/', async (req, res) => {
+  try {
+    const { search, specialization, status, department } = req.query;
+    const filter = { isActive: true };
+
+    if (search) {
+      filter.$or = [
+        { fullName: { $regex: search, $options: 'i' } },
+        { employeeId: { $regex: search, $options: 'i' } },
+        { specialization: { $regex: search, $options: 'i' } }
+      ];
     }
-  },
-  education: [{
-    degree: { type: String, trim: true },
-    institution: { type: String, trim: true },
-    year: { type: Number },
-    country: { type: String, trim: true }
-  }],
-  experience: [{
-    position: { type: String, trim: true },
-    institution: { type: String, trim: true },
-    from: { type: Date },
-    to: { type: Date },
-    current: { type: Boolean, default: false }
-  }],
-  languages: [{
-    type: String,
-    trim: true
-  }],
-  rating: {
-    type: Number,
-    min: 0,
-    max: 5,
-    default: 0
-  },
-  totalReviews: {
-    type: Number,
-    default: 0
-  },
-  patients: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient'
-  }],
-  maxPatientsPerDay: {
-    type: Number,
-    default: 20
-  },
-  status: {
-    type: String,
-    enum: ['available', 'busy', 'on_leave', 'off_duty', 'inactive'],
-    default: 'available'
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  notes: {
-    type: String,
-    maxlength: 500
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+
+    if (specialization) filter.specialization = specialization;
+    if (status) filter.status = status;
+    if (department) filter.department = department;
+
+    const doctors = await Doctor.find(filter)
+      .populate('user', 'username email phone')
+      .populate('employee', 'fullName employeeId')
+      .sort({ fullName: 1 })
+      .limit(100);
+
+    const total = await Doctor.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        doctors,
+        total,
+        limit: 100
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في جلب الأطباء:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء جلب الأطباء'
+    });
   }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
 });
 
-// Virtuals
-DoctorSchema.virtual('fullDetails').get(function() {
-  return `د. ${this.fullName} (${this.specialization})`;
+// =============================================
+// 2. الحصول على طبيب معين
+// =============================================
+router.get('/:id', async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id)
+      .populate('user', 'username email phone')
+      .populate('employee', 'fullName employeeId');
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
+    }
+
+    // جلب عدد المواعيد القادمة
+    const upcomingAppointments = await Appointment.countDocuments({
+      doctor: doctor._id,
+      date: { $gte: new Date() },
+      status: { $in: ['scheduled', 'confirmed'] }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        doctor,
+        upcomingAppointments
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في جلب الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء جلب الطبيب'
+    });
+  }
 });
 
-DoctorSchema.virtual('isAvailable').get(function() {
-  return this.status === 'available' && this.isActive;
+// =============================================
+// 3. إضافة طبيب جديد
+// =============================================
+router.post('/', async (req, res) => {
+  try {
+    const doctorData = req.body;
+
+    // التحقق من التكرار
+    const existing = await Doctor.findOne({
+      $or: [
+        { employeeId: doctorData.employeeId },
+        { licenseNumber: doctorData.licenseNumber }
+      ]
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'يوجد طبيب بنفس رقم الموظف أو رقم الرخصة'
+      });
+    }
+
+    // التحقق من وجود المستخدم
+    if (doctorData.userId) {
+      const user = await User.findById(doctorData.userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'المستخدم غير موجود'
+        });
+      }
+      doctorData.user = doctorData.userId;
+      delete doctorData.userId;
+    }
+
+    const doctor = new Doctor(doctorData);
+    await doctor.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إضافة الطبيب بنجاح',
+      data: { doctor }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في إضافة الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء إضافة الطبيب'
+    });
+  }
 });
 
-// Indexes
-DoctorSchema.index({ employeeId: 1, isActive: 1 });
-DoctorSchema.index({ licenseNumber: 1 });
-DoctorSchema.index({ fullName: 'text', specialization: 'text' });
-DoctorSchema.index({ specialization: 1, status: 1 });
+// =============================================
+// 4. تحديث طبيب
+// =============================================
+router.put('/:id', async (req, res) => {
+  try {
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
 
-// Middleware
-DoctorSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث الطبيب بنجاح',
+      data: { doctor }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في تحديث الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الطبيب'
+    });
+  }
 });
 
-module.exports = mongoose.model('Doctor', DoctorSchema);
+// =============================================
+// 5. حذف طبيب
+// =============================================
+router.delete('/:id', async (req, res) => {
+  try {
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false, status: 'inactive', updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم حذف الطبيب بنجاح'
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في حذف الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء حذف الطبيب'
+    });
+  }
+});
+
+// =============================================
+// 6. تحديث حالة الطبيب
+// =============================================
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'الحالة مطلوبة'
+      });
+    }
+
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { status, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث حالة الطبيب بنجاح',
+      data: { doctor }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في تحديث حالة الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث حالة الطبيب'
+    });
+  }
+});
+
+// =============================================
+// 7. الحصول على مواعيد الطبيب
+// =============================================
+router.get('/:id/appointments', async (req, res) => {
+  try {
+    const { startDate, endDate, status } = req.query;
+
+    const filter = { doctor: req.params.id };
+
+    if (startDate) filter.date = { $gte: new Date(startDate) };
+    if (endDate) filter.date = { ...filter.date, $lte: new Date(endDate) };
+    if (status) filter.status = status;
+
+    const appointments = await Appointment.find(filter)
+      .populate('patient', 'fullName patientId phone')
+      .sort({ date: 1 })
+      .limit(100);
+
+    res.json({
+      success: true,
+      data: {
+        appointments,
+        total: appointments.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في جلب مواعيد الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء جلب مواعيد الطبيب'
+    });
+  }
+});
+
+module.exports = router;
