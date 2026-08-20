@@ -25,5 +25,10 @@
     "MONGODB_URI": "@mongodb_uri",
     "SESSION_SECRET": "@session_secret",
     "PI_API_KEY": "@pi_api_key"
+  },
+  "build": {
+    "env": {
+      "NODE_ENV": "production"
+    }
   }
 }
