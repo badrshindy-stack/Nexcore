@@ -1,121 +1,240 @@
 const express = require('express');
-const Doctor = require('../models/Doctor');
-const Department = require('../models/Department');
-
 const router = express.Router();
+const Doctor = require('../models/Doctor');
+const User = require('../models/User');
+const Appointment = require('../models/Appointment');
 
-// عرض جميع الأطباء
+// =============================================
+// 1. الحصول على جميع الأطباء
+// =============================================
 router.get('/', async (req, res) => {
-    try {
-        const doctors = await Doctor.find().populate('department').sort({ name: 1 });
-        res.json(doctors);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+  try {
+    const { search, specialization, status, department } = req.query;
+    const filter = { isActive: true };
+
+    if (search) {
+      filter.$or = [
+        { fullName: { $regex: search, $options: 'i' } },
+        { employeeId: { $regex: search, $options: 'i' } },
+        { specialization: { $regex: search, $options: 'i' } }
+      ];
     }
+
+    if (specialization) filter.specialization = specialization;
+    if (status) filter.status = status;
+    if (department) filter.department = department;
+
+    const doctors = await Doctor.find(filter)
+      .populate('user', 'username email phone')
+      .populate('employee', 'fullName employeeId')
+      .sort({ fullName: 1 });
+
+    res.json({
+      success: true,
+      data: { doctors, total: doctors.length }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في جلب الأطباء:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء جلب الأطباء'
+    });
+  }
 });
 
-// عرض طبيب محدد
+// =============================================
+// 2. الحصول على طبيب معين
+// =============================================
 router.get('/:id', async (req, res) => {
-    try {
-        const doctor = await Doctor.findById(req.params.id).populate('department');
-        if (!doctor) {
-            return res.status(404).json({ error: 'الطبيب غير موجود' });
-        }
-        res.json(doctor);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+  try {
+    const doctor = await Doctor.findById(req.params.id)
+      .populate('user', 'username email phone')
+      .populate('employee', 'fullName employeeId');
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
     }
+
+    const upcomingAppointments = await Appointment.countDocuments({
+      doctor: doctor._id,
+      date: { $gte: new Date() },
+      status: { $in: ['scheduled', 'confirmed'] }
+    });
+
+    res.json({
+      success: true,
+      data: { doctor, upcomingAppointments }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في جلب الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء جلب الطبيب'
+    });
+  }
 });
 
-// إضافة طبيب جديد
+// =============================================
+// 3. إضافة طبيب جديد
+// =============================================
 router.post('/', async (req, res) => {
-    try {
-        const { name, specialization, license_number, phone, email, department, bio, photo_url, available_hours } = req.body;
+  try {
+    const doctorData = req.body;
 
-        if (!name || !specialization) {
-            return res.status(400).json({ error: 'الاسم والتخصص مطلوبان' });
-        }
+    const existing = await Doctor.findOne({
+      $or: [
+        { employeeId: doctorData.employeeId },
+        { licenseNumber: doctorData.licenseNumber }
+      ]
+    });
 
-        const doctor = new Doctor({
-            name,
-            specialization,
-            license_number,
-            phone,
-            email,
-            department,
-            bio,
-            photo_url,
-            available_hours
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'يوجد طبيب بنفس رقم الموظف أو رقم الرخصة'
+      });
+    }
+
+    if (doctorData.userId) {
+      const user = await User.findById(doctorData.userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'المستخدم غير موجود'
         });
-
-        await doctor.save();
-        await doctor.populate('department');
-        res.status(201).json(doctor);
-    } catch (error) {
-        if (error.code === 11000) {
-            return res.status(400).json({ error: 'رقم الترخيص موجود بالفعل' });
-        }
-        res.status(500).json({ error: error.message });
+      }
+      doctorData.user = doctorData.userId;
+      delete doctorData.userId;
     }
+
+    const doctor = new Doctor(doctorData);
+    await doctor.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إضافة الطبيب بنجاح',
+      data: { doctor }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في إضافة الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء إضافة الطبيب'
+    });
+  }
 });
 
-// تحديث طبيب
+// =============================================
+// 4. تحديث طبيب
+// =============================================
 router.put('/:id', async (req, res) => {
-    try {
-        const { name, specialization, license_number, phone, email, department, bio, photo_url, available_hours } = req.body;
+  try {
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
 
-        const doctor = await Doctor.findByIdAndUpdate(
-            req.params.id,
-            {
-                $set: {
-                    name,
-                    specialization,
-                    license_number,
-                    phone,
-                    email,
-                    department,
-                    bio,
-                    photo_url,
-                    available_hours,
-                    updatedAt: new Date()
-                }
-            },
-            { new: true }
-        ).populate('department');
-
-        if (!doctor) {
-            return res.status(404).json({ error: 'الطبيب غير موجود' });
-        }
-
-        res.json(doctor);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
     }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث الطبيب بنجاح',
+      data: { doctor }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في تحديث الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الطبيب'
+    });
+  }
 });
 
-// حذف طبيب
+// =============================================
+// 5. حذف طبيب
+// =============================================
 router.delete('/:id', async (req, res) => {
-    try {
-        const doctor = await Doctor.findByIdAndDelete(req.params.id);
+  try {
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false, status: 'inactive', updatedAt: new Date() },
+      { new: true }
+    );
 
-        if (!doctor) {
-            return res.status(404).json({ error: 'الطبيب غير موجود' });
-        }
-
-        res.json({ message: 'تم حذف الطبيب بنجاح', doctor });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
     }
+
+    res.json({
+      success: true,
+      message: 'تم حذف الطبيب بنجاح'
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في حذف الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء حذف الطبيب'
+    });
+  }
 });
 
-// البحث عن أطباء حسب التخصص
-router.get('/search/specialization/:spec', async (req, res) => {
-    try {
-        const doctors = await Doctor.find({ specialization: req.params.spec }).populate('department');
-        res.json(doctors);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+// =============================================
+// 6. تحديث حالة الطبيب
+// =============================================
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'الحالة مطلوبة'
+      });
     }
+
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { status, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'الطبيب غير موجود'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث حالة الطبيب بنجاح',
+      data: { doctor }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في تحديث حالة الطبيب:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث حالة الطبيب'
+    });
+  }
 });
 
 module.exports = router;
